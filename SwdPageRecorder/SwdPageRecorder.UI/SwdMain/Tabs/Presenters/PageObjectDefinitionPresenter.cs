@@ -1,290 +1,265 @@
-﻿using System;
+﻿using SwdPageRecorder.WebDriver;
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading;
-
-using System.ComponentModel.DataAnnotations;
-
-using System.Collections.ObjectModel;
-
-using OpenQA.Selenium;
-using OpenQA.Selenium.Remote;
-using OpenQA.Selenium.Firefox;
-using SwdPageRecorder.WebDriver;
-using SwdPageRecorder.WebDriver.JsCommand;
-
-using System.Xml;
-using System.Xml.Linq;
-
-using System.Windows.Forms;
-using System.Diagnostics;
-
-using System.IO;
-using System.Xml.Serialization;
-
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Windows.Forms;
+using System.Xml.Serialization;
 
 namespace SwdPageRecorder.UI
 {
-    public class PageObjectDefinitionPresenter : IPresenter<PageObjectDefinitionView>
-    {
+	public class PageObjectDefinitionPresenter : IPresenter<PageObjectDefinitionView>
+	{
+		private const string PoxFileExtension = ".pox";
 
-        const string PoxFileExtension = ".pox";
-        
-        private PageObjectDefinitionView view;
-        public bool _isEditingExistingNode = false;
-        public TreeNode _currentEditingNode = null;
+		private PageObjectDefinitionView view;
+		public bool _isEditingExistingNode = false;
+		public TreeNode _currentEditingNode = null;
 
-        public bool IsDirty { get; private set; }
+		public bool IsDirty { get; private set; }
 
-        public event Action OnPageObjectTreeChanged = null;
+		public event Action OnPageObjectTreeChanged = null;
 
-        public void RaisePageObjectTreeChanged()
-        {
-            if (OnPageObjectTreeChanged != null)
-            {
-                OnPageObjectTreeChanged();
-            }
-        }
+		public void RaisePageObjectTreeChanged()
+		{
+			if (OnPageObjectTreeChanged != null)
+			{
+				OnPageObjectTreeChanged();
+			}
+		}
 
-        public PageObjectDefinitionPresenter()
-        {
-            IsDirty = false;
-        }
+		public PageObjectDefinitionPresenter()
+		{
+			IsDirty = false;
+		}
 
-        private string lastSavedFilePath = String.Empty;
+		private string lastSavedFilePath = String.Empty;
 
+		public void InitWithView(PageObjectDefinitionView view)
+		{
+			this.view = view;
+		}
 
-        public void InitWithView(PageObjectDefinitionView view)
-        {
-            this.view = view;
-        }
+		internal void UpdatePageDefinition(WebElementDefinition element)
+		{
+			UpdatePageDefinition(element, false);
+		}
 
-        internal void UpdatePageDefinition(WebElementDefinition element)
-        {
-            UpdatePageDefinition(element, false);
-        }
+		internal void UpdatePageDefinition(WebElementDefinition element, bool forceAddNew)
+		{
+			var results = new List<ValidationResult>();
+			var context = new ValidationContext(element, null, null);
 
-        internal void UpdatePageDefinition(WebElementDefinition element, bool forceAddNew)
-        {
+			bool isValid = Validator.TryValidateObject(element, context, results, true);
+			if (!isValid)
+			{
+				var validationMessage = String.Join("\n", results.Select(t => String.Format("- {0}", t.ErrorMessage)));
+				view.DisplayMessage("Validation Error", validationMessage);
+				return;
+			}
 
-            var results = new List<ValidationResult>();
-            var context = new ValidationContext(element, null, null);
+			if (forceAddNew)
+			{
+				view.AddToPageDefinitions(element);
+				NotifyOnChanges();
+				return;
+			}
 
-            bool isValid = Validator.TryValidateObject(element, context, results, true);
-            if (!isValid)
-            {
-                var validationMessage = String.Join("\n", results.Select(t => String.Format("- {0}", t.ErrorMessage)));
-                view.DisplayMessage("Validation Error", validationMessage);
-                return;
-            }
+			if (_isEditingExistingNode)
+			{
+				view.UpdateExistingPageDefinition(_currentEditingNode, element);
+				NotifyOnChanges();
+			}
+			else
+			{
+				_isEditingExistingNode = true;
+				_currentEditingNode = view.AddToPageDefinitions(element);
+				NotifyOnChanges();
+			}
+		}
 
-            if (forceAddNew)
-            {
-                view.AddToPageDefinitions(element);
-                NotifyOnChanges();
-                return;
-            }
+		internal void OpenExistingNodeForEdit(TreeNode treeNode)
+		{
+			Presenters.SelectorsEditPresenter.OpenExistingNodeForEdit(treeNode);
+		}
 
-            if (_isEditingExistingNode)
-            {
-                view.UpdateExistingPageDefinition(_currentEditingNode, element);
-                NotifyOnChanges();
-            }
-            else
-            {
-                _isEditingExistingNode = true;
-                _currentEditingNode = view.AddToPageDefinitions(element);
-                NotifyOnChanges();
-            }
-        }
+		internal void UpdateLastCallStat(string statText)
+		{
+			view.UpdateLastCallStat(statText);
+		}
 
+		internal SwdPageObject GetWebElementDefinitionFromTree()
+		{
+			return view.GetWebElementDefinitionFromTree();
+		}
 
-        internal void OpenExistingNodeForEdit(TreeNode treeNode)
-        {
-            Presenters.SelectorsEditPresenter.OpenExistingNodeForEdit(treeNode);
-        }
+		internal bool IsWebElementNode(TreeNode treeNode)
+		{
+			return (treeNode.Tag as WebElementDefinition) != null;
+		}
 
-        internal void UpdateLastCallStat(string statText)
-        {
-            view.UpdateLastCallStat(statText);
-        }
+		internal void ReleaseNode(TreeNode selectedNode)
+		{
+			_isEditingExistingNode = false;
+			_currentEditingNode = null;
+		}
 
-        internal SwdPageObject GetWebElementDefinitionFromTree()
-        {
-            return view.GetWebElementDefinitionFromTree();
-        }
+		public string GetDefaultPageObjectsDirectory()
+		{
+			string fullPath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+			string theDirectory = Path.GetDirectoryName(fullPath);
+			return theDirectory;
+		}
 
-        internal bool IsWebElementNode(TreeNode treeNode)
-        {
-            return (treeNode.Tag as WebElementDefinition) != null;
-        }
+		internal void InitPageObjectFiles()
+		{
+			var theDirectory = GetDefaultPageObjectsDirectory();
+			string[] files = Directory.GetFiles(theDirectory)
+					 .Where(f => f.EndsWith(PoxFileExtension))
+					 .Select(f => Path.GetFileNameWithoutExtension(f))
+					 .ToArray();
 
-        internal void ReleaseNode(TreeNode selectedNode)
-        {
-            _isEditingExistingNode = false;
-            _currentEditingNode = null;
+			view.SetPageObjectFiles(files);
+		}
 
-        }
+		internal void UpdatePageTreeFromFileName()
+		{
+			view.UpdatePageTreeFromFileName();
+		}
 
-        public string GetDefaultPageObjectsDirectory()
-        {
-            string fullPath = System.Reflection.Assembly.GetExecutingAssembly().Location;
-            string theDirectory = Path.GetDirectoryName(fullPath);
-            return theDirectory;
-        }
+		internal void UpdateControlsState()
+		{
+			bool buttonSaveShouldBeEnabled = true;
 
-        internal void InitPageObjectFiles()
-        {
-            var theDirectory = GetDefaultPageObjectsDirectory();
-            string[] files = Directory.GetFiles(theDirectory)
-                     .Where(f => f.EndsWith(PoxFileExtension))
-                     .Select( f => Path.GetFileNameWithoutExtension(f))
-                     .ToArray();
-            
-            view.SetPageObjectFiles(files);
-        }
+			// When the PageObject name is empty
+			if (string.IsNullOrWhiteSpace(view.GetPageObjectName()))
+			{
+				buttonSaveShouldBeEnabled = false;
+			}
+			// Or no changes had occured after last save
+			else if (!IsDirty)
+			{
+				buttonSaveShouldBeEnabled = false;
+			}
+			view.btnSavePageObject.Enabled = buttonSaveShouldBeEnabled;
+		}
 
-        internal void UpdatePageTreeFromFileName()
-        {
-            view.UpdatePageTreeFromFileName();
-        }
+		internal void NotifyOnChanges()
+		{
+			IsDirty = true;
+			UpdateControlsState();
+			RaisePageObjectTreeChanged();
+		}
 
-        internal void UpdateControlsState()
-        {
-            bool buttonSaveShouldBeEnabled = true;
+		internal void SavePageObject()
+		{
+			string pageObjectFileName = GetPageObjectFileName();
+			string targetFullPath = Path.Combine(GetDefaultPageObjectsDirectory(), pageObjectFileName);
 
-            // When the PageObject name is empty
-            if (string.IsNullOrWhiteSpace(view.GetPageObjectName()))
-            {
-                buttonSaveShouldBeEnabled = false;
-            }
-            // Or no changes had occured after last save
-            else if (!IsDirty)
-            {
-                buttonSaveShouldBeEnabled = false;
-            }
-            view.btnSavePageObject.Enabled = buttonSaveShouldBeEnabled;
-        }
+			if (File.Exists(targetFullPath) && lastSavedFilePath != targetFullPath)
+			{
+				if (!view.ConfirmFileOverwrite(targetFullPath))
+				{
+					return;
+				}
+			}
 
-        internal void NotifyOnChanges()
-        {
-            IsDirty = true;
-            UpdateControlsState();
-            RaisePageObjectTreeChanged();
-        }
+			try
+			{
+				SavePageObjectToFile(targetFullPath);
+			}
+			catch (Exception e)
+			{
+				MyLog.Exception(e);
+				view.NotifyOnSaveError(e.Message, targetFullPath);
+				return;
+			}
+			InitPageObjectFiles();
 
-        internal void SavePageObject()
-        {
-            string pageObjectFileName = GetPageObjectFileName();
-            string targetFullPath = Path.Combine(GetDefaultPageObjectsDirectory(), pageObjectFileName);
+			IsDirty = false;
+			lastSavedFilePath = targetFullPath;
+			UpdateControlsState();
+		}
 
-            if (File.Exists(targetFullPath) && lastSavedFilePath != targetFullPath)
-            {
-                if (!view.ConfirmFileOverwrite(targetFullPath))
-                {
-                    return;
-                }
-            }
+		private void SavePageObjectToFile(string targetFullPath)
+		{
+			var definitions = GetWebElementDefinitionFromTree();
+			using (var stream = File.Create(targetFullPath))
+			{
+				var serializer = new XmlSerializer(typeof(SwdPageObject));
+				serializer.Serialize(stream, definitions);
+			}
+		}
 
-            try
-            {
-                SavePageObjectToFile(targetFullPath);
-            }
-            catch(Exception e)
-            {
-                MyLog.Exception(e);
-                view.NotifyOnSaveError(e.Message, targetFullPath);
-                return;
-            }
-            InitPageObjectFiles();
+		private string GetPageObjectFileName()
+		{
+			string fileName = view.GetPageObjectName().Trim();
+			if (!fileName.ToLower().EndsWith(PoxFileExtension))
+			{
+				fileName += PoxFileExtension;
+			}
 
-            IsDirty = false;
-            lastSavedFilePath = targetFullPath;
-            UpdateControlsState();
-        }
+			return fileName;
+		}
 
-        private void SavePageObjectToFile(string targetFullPath)
-        {
-            var definitions = GetWebElementDefinitionFromTree();
-            using (var stream = File.Create(targetFullPath))
-            {
-                var serializer = new XmlSerializer(typeof(SwdPageObject));
-                serializer.Serialize(stream, definitions);
-            }
+		internal void LoadPageObject(string pageObjectFileName)
+		{
+			string pageObjectFile = pageObjectFileName + PoxFileExtension;
+			string targetFullPath = Path.Combine(GetDefaultPageObjectsDirectory(), pageObjectFile);
 
-        }
+			SwdPageObject pageObject = null;
+			try
+			{
+				pageObject = LoadPageObjectFromFile(targetFullPath);
+			}
+			catch (Exception e)
+			{
+				MyLog.Exception(e);
+				view.NotifyOnLoadError(e.Message, targetFullPath);
+				return;
+			}
 
-        private string GetPageObjectFileName()
-        {
-            string fileName = view.GetPageObjectName().Trim();
-            if (!fileName.ToLower().EndsWith(PoxFileExtension))
-            {
-                fileName += PoxFileExtension;
-            }
+			view.ClearPageObjectTree();
+			foreach (var def in pageObject.Items)
+			{
+				UpdatePageDefinition(def, forceAddNew: true);
+			}
 
-            return fileName;
-        }
+			IsDirty = false;
+			lastSavedFilePath = targetFullPath;
+			UpdateControlsState();
+			RaisePageObjectTreeChanged();
+		}
 
-        internal void LoadPageObject(string pageObjectFileName)
-        {
-            string pageObjectFile = pageObjectFileName + PoxFileExtension;
-            string targetFullPath = Path.Combine(GetDefaultPageObjectsDirectory(), pageObjectFile);
+		private SwdPageObject LoadPageObjectFromFile(string pageObjectFileName)
+		{
+			SwdPageObject definitions = null;
 
-            SwdPageObject pageObject = null;
-            try
-            {
-                pageObject = LoadPageObjectFromFile(targetFullPath);
-            }
-            catch (Exception e)
-            {
-                MyLog.Exception(e);
-                view.NotifyOnLoadError(e.Message, targetFullPath);
-                return;
-            }
+			using (FileStream stream = File.OpenRead(pageObjectFileName))
+			{
+				var serializer = new XmlSerializer(typeof(SwdPageObject));
+				definitions = (SwdPageObject)serializer.Deserialize(stream);
+			}
+			return definitions;
+		}
 
-            view.ClearPageObjectTree();
-            foreach (var def in pageObject.Items)
-            {
+		internal void OpenDefaultFolderInWindowsExplorer()
+		{
+			Process.Start(GetDefaultPageObjectsDirectory());
+		}
 
-                UpdatePageDefinition(def, forceAddNew: true);
-            }
+		internal void ShowPropertiesForNode(TreeNode treeNode)
+		{
+			WebElementDefinition element = (treeNode.Tag as WebElementDefinition);
 
-            IsDirty = false;
-            lastSavedFilePath = targetFullPath;
-            UpdateControlsState();
-            RaisePageObjectTreeChanged();
-        }
+			WebElementDefinition readOnlyElement = element.Clone();
+			TypeDescriptor.AddAttributes(readOnlyElement, new Attribute[] { new ReadOnlyAttribute(true) });
+			element = readOnlyElement;
 
-        private SwdPageObject LoadPageObjectFromFile(string pageObjectFileName)
-        {
-            SwdPageObject definitions = null;
-
-            using (FileStream stream = File.OpenRead(pageObjectFileName))
-            {
-                var serializer = new XmlSerializer(typeof(SwdPageObject));
-                definitions = (SwdPageObject)serializer.Deserialize(stream);
-            }
-            return definitions;
-        }
-
-        internal void OpenDefaultFolderInWindowsExplorer()
-        {
-            Process.Start(GetDefaultPageObjectsDirectory());
-        }
-
-        internal void ShowPropertiesForNode(TreeNode treeNode)
-        {
-            WebElementDefinition element = (treeNode.Tag as WebElementDefinition);
-
-            WebElementDefinition readOnlyElement = element.Clone();
-            TypeDescriptor.AddAttributes(readOnlyElement, new Attribute[] { new ReadOnlyAttribute(true) });
-            element = readOnlyElement;
-
-            view.propPageElement.SelectedObject = readOnlyElement;
-        }
-
-    }
+			view.propPageElement.SelectedObject = readOnlyElement;
+		}
+	}
 }

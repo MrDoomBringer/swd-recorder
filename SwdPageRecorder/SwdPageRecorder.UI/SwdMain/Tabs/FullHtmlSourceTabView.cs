@@ -1,46 +1,40 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Drawing;
-using System.Data;
-using System.Linq;
-using System.Text;
+﻿using FastColoredTextBoxNS;
+using System;
 using System.Windows.Forms;
-using FastColoredTextBoxNS;
 
 namespace SwdPageRecorder.UI
 {
-    public partial class FullHtmlSourceTabView : UserControl, IView
-    {
-        private FullHtmlSourceTabPresenter presenter;
-        public FullHtmlSourceTabView()
-        {
-            InitializeComponent();
+	public partial class FullHtmlSourceTabView : UserControl, IView
+	{
+		private FullHtmlSourceTabPresenter presenter;
 
-            this.presenter = Presenters.PageObjectSourceCodePresenter;
-            presenter.InitWithView(this);
+		public FullHtmlSourceTabView()
+		{
+			InitializeComponent();
 
-            txtHtmlPageSource.Language = Language.HTML;
-        }
+			this.presenter = Presenters.PageObjectSourceCodePresenter;
+			presenter.InitWithView(this);
 
-        private void btnGetHtmlSource_Click(object sender, EventArgs e)
-        {
-            presenter.DisplayHtmlPageSource();
-        }
+			txtHtmlPageSource.Language = Language.HTML;
+		}
 
-        internal void FillHtmlCodeBox(string htmlText)
-        {
-            txtHtmlPageSource.Clear();
-            txtHtmlPageSource.Text = htmlText;
-        }
+		private void btnGetHtmlSource_Click(object sender, EventArgs e)
+		{
+			presenter.DisplayHtmlPageSource();
+		}
 
-        private void txtHtmlPageSource_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Control && e.KeyCode == Keys.A)
-            {
-                txtHtmlPageSource.SelectAll();
-            }
-        }
+		internal void FillHtmlCodeBox(string htmlText)
+		{
+			txtHtmlPageSource.Clear();
+			txtHtmlPageSource.Text = htmlText;
+		}
 
-    }
+		private void txtHtmlPageSource_KeyDown(object sender, KeyEventArgs e)
+		{
+			if (e.Control && e.KeyCode == Keys.A)
+			{
+				txtHtmlPageSource.SelectAll();
+			}
+		}
+	}
 }

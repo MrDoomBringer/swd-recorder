@@ -8,13 +8,11 @@
 
     See http://www.JSON.org/js.html
 
-
     This code should be minified before deployment.
     See http://javascript.crockford.com/jsmin.html
 
     USE YOUR OWN COPY. IT IS EXTREMELY UNWISE TO LOAD CODE FROM SERVERS YOU DO
     NOT CONTROL.
-
 
     This file creates a global JSON object containing two methods: stringify
     and parse.
@@ -89,7 +87,6 @@
             text = JSON.stringify(['e', {pluribus: 'unum'}]);
             // text is '["e",{"pluribus":"unum"}]'
 
-
             text = JSON.stringify(['e', {pluribus: 'unum'}], null, '\t');
             // text is '[\n\t"e",\n\t{\n\t\t"pluribus": "unum"\n\t}\n]'
 
@@ -98,7 +95,6 @@
                     'Date(' + this[key] + ')' : value;
             });
             // text is '["Date(---current time---)"]'
-
 
         JSON.parse(text, reviver)
             This method parses a JSON text to produce an object or array.
@@ -141,7 +137,6 @@
                 return value;
             });
 
-
     This is a reference implementation. You are free to copy, modify, or
     redistribute.
 */
@@ -154,7 +149,6 @@
     lastIndex, length, parse, prototype, push, replace, slice, stringify,
     test, toJSON, toString, valueOf
 */
-
 
 // Create a JSON object only if one does not already exist. We create the
 // methods in a closure to avoid creating global variables.
@@ -172,9 +166,7 @@ if (typeof JSON !== 'object') {
     }
 
     if (typeof Date.prototype.toJSON !== 'function') {
-
         Date.prototype.toJSON = function () {
-
             return isFinite(this.valueOf())
                 ? this.getUTCFullYear()     + '-' +
                     f(this.getUTCMonth() + 1) + '-' +
@@ -207,9 +199,7 @@ if (typeof JSON !== 'object') {
         },
         rep;
 
-
     function quote(string) {
-
 // If the string contains no control characters, no quote characters, and no
 // backslash characters, then we can safely slap some quotes around it.
 // Otherwise we must also replace the offending characters with safe escape
@@ -224,9 +214,7 @@ if (typeof JSON !== 'object') {
         }) + '"' : '"' + string + '"';
     }
 
-
     function str(key, holder) {
-
 // Produce a string from holder[key].
 
         var i,          // The loop counter.
@@ -292,7 +280,6 @@ if (typeof JSON !== 'object') {
 // Is the value an array?
 
             if (Object.prototype.toString.apply(value) === '[object Array]') {
-
 // The value is an array. Stringify every element. Use null as a placeholder
 // for non-JSON values.
 
@@ -327,7 +314,6 @@ if (typeof JSON !== 'object') {
                     }
                 }
             } else {
-
 // Otherwise, iterate through all of the keys in the object.
 
                 for (k in value) {
@@ -357,7 +343,6 @@ if (typeof JSON !== 'object') {
 
     if (typeof JSON.stringify !== 'function') {
         JSON.stringify = function (value, replacer, space) {
-
 // The stringify method takes a value and an optional replacer, and an optional
 // space parameter, and returns a JSON text. The replacer can be a function
 // that can replace values, or an array of strings that will select the keys.
@@ -377,7 +362,6 @@ if (typeof JSON !== 'object') {
                 }
 
 // If the space parameter is a string, it will be used as the indent string.
-
             } else if (typeof space === 'string') {
                 indent = space;
             }
@@ -399,19 +383,16 @@ if (typeof JSON !== 'object') {
         };
     }
 
-
 // If the JSON object does not yet have a parse method, give it one.
 
     if (typeof JSON.parse !== 'function') {
         JSON.parse = function (text, reviver) {
-
 // The parse method takes a text and an optional reviver function, and returns
 // a JavaScript value if the text is a valid JSON text.
 
             var j;
 
             function walk(holder, key) {
-
 // The walk method is used to recursively walk the resulting structure so
 // that modifications can be made.
 
@@ -430,7 +411,6 @@ if (typeof JSON !== 'object') {
                 }
                 return reviver.call(holder, key, value);
             }
-
 
 // Parsing happens in four stages. In the first stage, we replace certain
 // Unicode characters with escape sequences. JavaScript handles many characters
@@ -462,7 +442,6 @@ if (typeof JSON !== 'object') {
                     .test(text.replace(/\\(?:["\\\/bfnrt]|u[0-9a-fA-F]{4})/g, '@')
                         .replace(/"[^"\\\n\r]*"|true|false|null|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?/g, ']')
                         .replace(/(?:^|:|,)(?:\s*\[)+/g, ''))) {
-
 // In the third stage we use the eval function to compile the text into a
 // JavaScript structure. The '{' operator is subject to a syntactic ambiguity
 // in JavaScript: it can begin a block or an object literal. We wrap the text

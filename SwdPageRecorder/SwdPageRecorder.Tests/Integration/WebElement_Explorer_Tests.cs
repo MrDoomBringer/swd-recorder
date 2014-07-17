@@ -1,41 +1,30 @@
-﻿using System;
-using System.Linq;
-using System.Collections.Generic;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-
-using OpenQA.Selenium;
-using OpenQA.Selenium.Remote;
-
-using SwdPageRecorder.WebDriver;
-
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SwdPageRecorder.TestModel;
-
-using FluentAssertions;
+using SwdPageRecorder.WebDriver;
+using System;
 
 namespace SwdPageRecorder.Tests.Integration
 {
-    [TestClass]
-    public class WebElement_Explorer_Tests : MyTest    
-    {
-        const int firstFrame = 0;
-        const int secondFrame = 1;
-        const int thirdFrame = 2;
-        
-        [TestMethod, Ignore]
-        public void WebElementExplorer_Test()
-        {
-            Helper.RunDefaultBrowser();
-            Helper.LoadTestFile("page_with_frames.html");
+	[TestClass]
+	public class WebElement_Explorer_Tests : MyTest
+	{
+		private const int firstFrame = 0;
+		private const int secondFrame = 1;
+		private const int thirdFrame = 2;
 
-            Helper.ToFrame(secondFrame);
+		[TestMethod, Ignore]
+		public void WebElementExplorer_Test()
+		{
+			Helper.RunDefaultBrowser();
+			Helper.LoadTestFile("page_with_frames.html");
 
-            SwdBrowser.InjectVisualSearch();
+			Helper.ToFrame(secondFrame);
 
-            //Helper.ClickId();
+			SwdBrowser.InjectVisualSearch();
 
-            throw new NotImplementedException();
-            
-        }
+			//Helper.ClickId();
 
-    }
+			throw new NotImplementedException();
+		}
+	}
 }

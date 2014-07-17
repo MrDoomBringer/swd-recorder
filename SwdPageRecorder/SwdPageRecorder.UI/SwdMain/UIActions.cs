@@ -1,106 +1,86 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading;
-
-using System.Collections.ObjectModel;
-
-using OpenQA.Selenium;
-using OpenQA.Selenium.Remote;
-using OpenQA.Selenium.Firefox;
-using SwdPageRecorder.WebDriver;
-using SwdPageRecorder.WebDriver.JsCommand;
-
-using System.Xml;
-using System.Xml.Linq;
-
-using System.Windows.Forms;
+﻿using SwdPageRecorder.WebDriver;
+using System;
 using System.Diagnostics;
-
-using System.Net;
-
+using System.Threading;
+using System.Windows.Forms;
 
 namespace SwdPageRecorder.UI
 {
-    public class UIActions
-    {
-        private static bool threadFinished = false;
-        private static void ThreadWorker(Action operation, out Exception exception, Action<Exception> onException)
-        {
-            Exception threadException = null;
-            try
-            {
-                operation();
-            }
-            catch (Exception e)
-            {
-                if (onException != null) onException(e);
-                threadException = e;
-            }
-            finally
-            {
-                threadFinished = true;
-                exception = threadException;
-            }
-        }
+	public class UIActions
+	{
+		private static bool threadFinished = false;
 
-        public static bool PerformSlowOperation(string operationId, Action operation, out Exception exception, Action<Exception> onThreadException, TimeSpan operationTimeout)
-        {
-            MyLog.Write("PerformSlowOperation: Started for operation: " + operationId);
+		private static void ThreadWorker(Action operation, out Exception exception, Action<Exception> onException)
+		{
+			Exception threadException = null;
+			try
+			{
+				operation();
+			}
+			catch (Exception e)
+			{
+				if (onException != null) onException(e);
+				threadException = e;
+			}
+			finally
+			{
+				threadFinished = true;
+				exception = threadException;
+			}
+		}
 
-            bool isSuccessful  = true;
-            threadFinished = false;
-            exception = null;
+		public static bool PerformSlowOperation(string operationId, Action operation, out Exception exception, Action<Exception> onThreadException, TimeSpan operationTimeout)
+		{
+			MyLog.Write("PerformSlowOperation: Started for operation: " + operationId);
 
-            Exception threadException = null;
+			bool isSuccessful = true;
+			threadFinished = false;
+			exception = null;
 
-            Thread opThread = new Thread(
-            () =>
-            {
-                ThreadWorker(operation, out threadException, onThreadException);
-            });
+			Exception threadException = null;
 
+			Thread opThread = new Thread(
+			() =>
+			{
+				ThreadWorker(operation, out threadException, onThreadException);
+			});
 
-            Presenters.SwdMainPresenter.DisplayLoadingIndicator(true);
-            
-            Stopwatch timeSpent = new Stopwatch();
-            timeSpent.Start();
+			Presenters.SwdMainPresenter.DisplayLoadingIndicator(true);
 
-            opThread.Start();
-            
-            while (!threadFinished)
-            {
-                Application.DoEvents();
+			Stopwatch timeSpent = new Stopwatch();
+			timeSpent.Start();
 
-                if (timeSpent.Elapsed > operationTimeout)
-                {
-                    Presenters.SwdMainPresenter.DisplayLoadingIndicator(false);
+			opThread.Start();
 
-                    string errorMessage = "Timeout had occurred while performing operation << "
-                                                + operationId + " >>. Timeout was: "
-                                                + operationTimeout.TotalSeconds + "sec";
-                    MyLog.Error(errorMessage);
-                    throw new TimeoutException(errorMessage);
-                }
-                
-            }
+			while (!threadFinished)
+			{
+				Application.DoEvents();
 
-            if (threadException != null)
-            {
-                MyLog.Write("PerformSlowOperation: Found Exception: " + threadException.Message);
-                isSuccessful = false;
-                exception = threadException;
-            }
+				if (timeSpent.Elapsed > operationTimeout)
+				{
+					Presenters.SwdMainPresenter.DisplayLoadingIndicator(false);
 
-            Presenters.SwdMainPresenter.DisplayLoadingIndicator(false);
-            
-            MyLog.Write("PerformSlowOperation: Finished for operation: " + operationId);
-            MyLog.Write("PerformSlowOperation: Operation result: " + (isSuccessful ? "successful :)" : "unsuccessful :("));
+					string errorMessage = "Timeout had occurred while performing operation << "
+												+ operationId + " >>. Timeout was: "
+												+ operationTimeout.TotalSeconds + "sec";
+					MyLog.Error(errorMessage);
+					throw new TimeoutException(errorMessage);
+				}
+			}
 
-            return isSuccessful;
+			if (threadException != null)
+			{
+				MyLog.Write("PerformSlowOperation: Found Exception: " + threadException.Message);
+				isSuccessful = false;
+				exception = threadException;
+			}
 
-        }
-    }
+			Presenters.SwdMainPresenter.DisplayLoadingIndicator(false);
+
+			MyLog.Write("PerformSlowOperation: Finished for operation: " + operationId);
+			MyLog.Write("PerformSlowOperation: Operation result: " + (isSuccessful ? "successful :)" : "unsuccessful :("));
+
+			return isSuccessful;
+		}
+	}
 }

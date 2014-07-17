@@ -1,13 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-
-namespace SwdPageRecorder.WebDriver.JsCommand
+﻿namespace SwdPageRecorder.WebDriver.JsCommand
 {
-    public class AddElement : BrowserCommand
-    {
-        public string ElementCodeName {get; set;}
-        public string ElementXPath { get; set; }
-    }
+	public class AddElement : BrowserCommand
+	{
+		public string ElementCodeName { get; set; }
+
+		public string ElementXPath { get; set; }
+	}
 }

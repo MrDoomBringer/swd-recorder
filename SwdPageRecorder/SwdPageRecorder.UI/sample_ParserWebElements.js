@@ -7,7 +7,7 @@ function readAllFile(filename)
     return fileData;
 }
 
-function includeFile (filename) 
+function includeFile (filename)
 {
       var fileData = readAllFile(filename);
       eval(fileData);

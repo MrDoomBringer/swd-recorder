@@ -1,219 +1,194 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading;
-
-
-using OpenQA.Selenium;
-using OpenQA.Selenium.Remote;
-using OpenQA.Selenium.Firefox;
+﻿using OpenQA.Selenium;
 using SwdPageRecorder.WebDriver;
-using SwdPageRecorder.WebDriver.JsCommand;
-
-using System.Xml;
-using System.Xml.Linq;
-
-using System.Windows.Forms;
-using System.Diagnostics;
-
-using System.Net;
-using System.IO;
-
-using System.Collections.ObjectModel;
+using System;
 using System.Collections;
-
+using System.Diagnostics;
+using System.IO;
+using System.Text;
+using System.Windows.Forms;
 
 namespace SwdPageRecorder.UI
 {
-    public class JavascriptEditorTabPresenter : IPresenter<JavaScriptEditorView>
-    {
-        private JavaScriptEditorView view = null;
-        
-        TreeNode SnippetFilesRoot { get; set; }
+	public class JavascriptEditorTabPresenter : IPresenter<JavaScriptEditorView>
+	{
+		private JavaScriptEditorView view = null;
 
+		private TreeNode SnippetFilesRoot { get; set; }
 
-        public void InitWithView(JavaScriptEditorView view)
-        {
-            this.view = view;
+		public void InitWithView(JavaScriptEditorView view)
+		{
+			this.view = view;
 
-            // Subscribe to WebDriverUtils events
-            SwdBrowser.OnDriverStarted += InitControls;
-            SwdBrowser.OnDriverClosed += InitControls;
-            InitControls();
+			// Subscribe to WebDriverUtils events
+			SwdBrowser.OnDriverStarted += InitControls;
+			SwdBrowser.OnDriverClosed += InitControls;
+			InitControls();
 
-            ReloadJavaScriptFilesTree();
+			ReloadJavaScriptFilesTree();
+		}
 
-        }
+		public void ReloadJavaScriptFilesTree()
+		{
+			string snippetsRoot = GetSnippetsFolder();
 
-        public void ReloadJavaScriptFilesTree()
-        {
-            string snippetsRoot = GetSnippetsFolder();
-            
-            TreeNode root = new TreeNode();
+			TreeNode root = new TreeNode();
 
-            root.Text = "Snippets";
-            root.Tag = snippetsRoot;
-            ReloadJavaScriptFilesTree(root, snippetsRoot);
+			root.Text = "Snippets";
+			root.Tag = snippetsRoot;
+			ReloadJavaScriptFilesTree(root, snippetsRoot);
 
-            view.UpdateTree(root);
-            view.ExpandTree();
+			view.UpdateTree(root);
+			view.ExpandTree();
+		}
 
-        }
+		private static string GetSnippetsFolder()
+		{
+			string snippetsRoot = Path.Combine(Utils.AssemblyDirectory, "Snippets");
+			return snippetsRoot;
+		}
 
-        private static string GetSnippetsFolder()
-        {
-            string snippetsRoot = Path.Combine(Utils.AssemblyDirectory, "Snippets");
-            return snippetsRoot;
-        }
+		public void ReloadJavaScriptFilesTree(TreeNode parentNode, string directoryPath)
+		{
+			try
+			{
+				foreach (string d in Directory.GetDirectories(directoryPath))
+				{
+					TreeNode directoryNode = new TreeNode();
+					DirectoryInfo dirInfo = new DirectoryInfo(d);
 
-        public void ReloadJavaScriptFilesTree(TreeNode parentNode, string directoryPath)
-        {
-            try
-            {
-                foreach (string d in Directory.GetDirectories(directoryPath))
-                {
-                    TreeNode directoryNode = new TreeNode();
-                    DirectoryInfo dirInfo = new DirectoryInfo(d);
+					directoryNode.Text = dirInfo.Name;
+					directoryNode.Tag = d;
 
-                    directoryNode.Text = dirInfo.Name;
-                    directoryNode.Tag = d;
+					parentNode.Nodes.Add(directoryNode);
 
-                    parentNode.Nodes.Add(directoryNode);
+					ReloadJavaScriptFilesTree(directoryNode, d);
+				}
+				foreach (string f in Directory.GetFiles(directoryPath))
+				{
+					TreeNode fileNode = new TreeNode();
 
-                    ReloadJavaScriptFilesTree(directoryNode, d);
-                }
-                foreach (string f in Directory.GetFiles(directoryPath))
-                {
-                    TreeNode fileNode = new TreeNode();
-                    
-                    FileInfo fileInfo = new FileInfo(f);
-                    fileNode.Text = fileInfo.Name;
-                    fileNode.Tag = f;
+					FileInfo fileInfo = new FileInfo(f);
+					fileNode.Text = fileInfo.Name;
+					fileNode.Tag = f;
 
-                    if (IsJavaScriptFile(f))
-                    {
-                        parentNode.Nodes.Add(fileNode);
-                    }
-                }
+					if (IsJavaScriptFile(f))
+					{
+						parentNode.Nodes.Add(fileNode);
+					}
+				}
+			}
+			catch (System.Exception ex)
+			{
+				Console.WriteLine(ex.Message);
+			}
+		}
 
+		private bool IsJavaScriptFile(string filePath)
+		{
+			if (filePath == null) return false;
+			if (!File.Exists(filePath)) return false;
 
-            }
-            catch (System.Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
-        }
+			return filePath.EndsWith(".js");
+		}
 
-        private bool IsJavaScriptFile(string filePath)
-        {
-            if (filePath == null) return false;
-            if (!File.Exists(filePath)) return false;
+		private void InitControls()
+		{
+			var driverIsRunning = SwdBrowser.IsWorking;
+			if (driverIsRunning)
+			{
+				view.SetControlsToEnabledState(true);
+			}
+			else
+			{
+				view.SetControlsToEnabledState(false);
+			}
+		}
 
-            return filePath.EndsWith(".js");
-        }
+		internal void TryOpenJavaScriptFile(TreeNode treeNode)
+		{
+			if (treeNode == null) return;
+			if (treeNode.Tag == null) return;
 
-        private void InitControls()
-        {
-            var driverIsRunning = SwdBrowser.IsWorking;
-            if (driverIsRunning)
-            {
-                view.SetControlsToEnabledState(true);
-            }
-            else
-            {
-                view.SetControlsToEnabledState(false);
-            }
-        }
+			string filePath = treeNode.Tag as string;
 
-        internal void TryOpenJavaScriptFile(TreeNode treeNode)
-        {
-            if (treeNode == null) return;
-            if (treeNode.Tag == null) return;
+			if (String.IsNullOrWhiteSpace(filePath)) return;
+			if (!File.Exists(filePath)) return;
+			if (!IsJavaScriptFile(filePath)) return;
 
-            string filePath = treeNode.Tag as string;
+			string fileContent = File.ReadAllText(filePath);
+			view.UpdateFileEditor(fileContent);
+		}
 
-            if (String.IsNullOrWhiteSpace(filePath)) return;
-            if (!File.Exists(filePath)) return;
-            if (!IsJavaScriptFile(filePath)) return;
+		internal void RunScript()
+		{
+			string scriptFromEditor = view.GetJavaScriptCodeFromEditor();
 
-            string fileContent = File.ReadAllText(filePath);
-            view.UpdateFileEditor(fileContent);
-        }
+			Exception outException;
+			bool isOk = false;
+			object result = null;
+			isOk = UIActions.PerformSlowOperation(
+						"Operation: RunScript() / Executing JavaScript Snippet",
+						() =>
+						{
+							result = SwdBrowser.ExecuteJavaScript(scriptFromEditor);
+						},
+							out outException,
+							null,
+							TimeSpan.FromMinutes(1)
+						);
 
-        internal void RunScript()
-        {
-            string scriptFromEditor = view.GetJavaScriptCodeFromEditor();
+			if (!isOk)
+			{
+				MyLog.Error("RunScript() Failed to execute JavaScript snippet");
+				MyLog.Exception(outException);
+				if (outException != null) throw outException;
+			}
 
-            Exception outException;
-            bool isOk = false;
-            object result = null;
-            isOk = UIActions.PerformSlowOperation(
-                        "Operation: RunScript() / Executing JavaScript Snippet",
-                        () =>
-                        {
-                            result = SwdBrowser.ExecuteJavaScript(scriptFromEditor);
-                        },
-                            out outException,
-                            null,
-                            TimeSpan.FromMinutes(1)
-                        );
+			string consoleOut = DumpObject(result);
+			view.AppendConsole(consoleOut);
+		}
 
-            if (!isOk)
-            {
-                MyLog.Error("RunScript() Failed to execute JavaScript snippet");
-                MyLog.Exception(outException);
-                if (outException != null) throw outException;
-            }
+		private string DumpObject(object sourceObject)
+		{
+			StringBuilder result = new StringBuilder("Result:\r\n");
 
-            string consoleOut = DumpObject(result);
-            view.AppendConsole(consoleOut);
+			if (sourceObject == null)
+			{
+				result.AppendLine("(null)");
+			}
+			else if (sourceObject is IWebElement)
+			{
+				result.AppendFormat(" > IWebElement\r\n");
+			}
+			else if (sourceObject is IDictionary)
+			{
+				IDictionary sourceDict = (IDictionary)sourceObject;
 
-        }
+				foreach (string key in sourceDict.Keys)
+				{
+					string value = (sourceDict[key] ?? "(null)").ToString();
+					result.AppendFormat(" > {0} : {1}\r\n", key, value);
+				}
+			}
+			else if (sourceObject is IEnumerable && !(sourceObject is String))
+			{
+				foreach (var item in (IEnumerable)sourceObject)
+				{
+					string value = (item ?? "(null)").ToString();
+					result.AppendFormat(" > {0}\r\n", value);
+				}
+			}
+			else
+			{
+				result.AppendLine(sourceObject.ToString());
+			}
 
-        private string DumpObject(object sourceObject)
-        {
-            StringBuilder result = new StringBuilder("Result:\r\n");
+			return result.ToString();
+		}
 
-            if (sourceObject == null)
-            {
-                result.AppendLine("(null)");
-            }
-            else if (sourceObject is IWebElement)
-            {
-                result.AppendFormat(" > IWebElement\r\n");
-            }
-            else if (sourceObject is IDictionary)
-            {
-                IDictionary sourceDict = (IDictionary)sourceObject;
-
-                foreach (string key in sourceDict.Keys)
-                {
-                    string value = (sourceDict[key] ?? "(null)").ToString();
-                    result.AppendFormat(" > {0} : {1}\r\n", key, value);
-                }
-
-            }
-            else if (sourceObject is IEnumerable && !(sourceObject is String))
-            {
-                foreach (var item in (IEnumerable)sourceObject)
-                {
-                    string value = (item ?? "(null)").ToString();
-                    result.AppendFormat(" > {0}\r\n", value);
-                }
-            }
-            else
-            {
-                result.AppendLine(sourceObject.ToString());
-            }
-
-            return result.ToString();
-        }
-
-        internal void ShowSnippetsFolder()
-        {
-            Process.Start(GetSnippetsFolder());
-        }
-    }
+		internal void ShowSnippetsFolder()
+		{
+			Process.Start(GetSnippetsFolder());
+		}
+	}
 }

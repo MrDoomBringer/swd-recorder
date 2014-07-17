@@ -1,320 +1,291 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading;
-
-using System.Collections.ObjectModel;
-
-using OpenQA.Selenium;
-using OpenQA.Selenium.Remote;
-using OpenQA.Selenium.Firefox;
+﻿using OpenQA.Selenium;
 using SwdPageRecorder.WebDriver;
 using SwdPageRecorder.WebDriver.JsCommand;
-
-using System.Xml;
-using System.Xml.Linq;
-
+using System;
+using System.Threading;
 using System.Windows.Forms;
-using System.Diagnostics;
-
-
 
 namespace SwdPageRecorder.UI
 {
-    public class SwdMainPresenter
-    {
-        private SwdMainView view;
-        public IWebDriver Driver { get { return SwdBrowser.GetDriver(); } }
+	public class SwdMainPresenter
+	{
+		private SwdMainView view;
 
-        public Thread visualSearchWorker = null;
+		public IWebDriver Driver { get { return SwdBrowser.GetDriver(); } }
 
-        const int VisualSearchQueryDelayMs = 777;
+		public Thread visualSearchWorker = null;
 
+		private const int VisualSearchQueryDelayMs = 777;
 
-        public void InitView(SwdMainView view)
-        {
-            this.view = view;
+		public void InitView(SwdMainView view)
+		{
+			this.view = view;
 
-            // Subscribe to WebDriverUtils events
-            SwdBrowser.OnDriverStarted += InitControls;
-            SwdBrowser.OnDriverClosed += InitControls;
+			// Subscribe to WebDriverUtils events
+			SwdBrowser.OnDriverStarted += InitControls;
+			SwdBrowser.OnDriverClosed += InitControls;
 
-            SwdBrowser.OnDriverStarted += InitSwitchToControls;
+			SwdBrowser.OnDriverStarted += InitSwitchToControls;
 
-            InitControls();
-        }
+			InitControls();
+		}
 
-        private void InitSwitchToControls()
-        {
+		private void InitSwitchToControls()
+		{
+			view.SetInitialRefreshMessageForSwitchToControls();
+		}
 
-            view.SetInitialRefreshMessageForSwitchToControls();
-        }
+		public void RefreshWindowsList()
+		{
+			Exception outException;
+			bool isOk = false;
 
-        
-        public void RefreshWindowsList()
-        {
-            Exception outException;
-            bool isOk = false;
+			isOk = UIActions.PerformSlowOperation(
+						"Operation: Refresh All Windows List",
+						() =>
+						{
+							BrowserWindow[] currentWindows = SwdBrowser.GetBrowserWindows();
+							string currentWindowHandle = SwdBrowser.GetCurrentWindowHandle();
+							view.UpdateBrowserWindowsList(currentWindows, currentWindowHandle);
+						},
+							out outException,
+							null,
+							TimeSpan.FromMinutes(1)
+						);
 
-            isOk = UIActions.PerformSlowOperation(
-                        "Operation: Refresh All Windows List",
-                        () =>
-                        {
-                            BrowserWindow[] currentWindows = SwdBrowser.GetBrowserWindows();
-                            string currentWindowHandle = SwdBrowser.GetCurrentWindowHandle();
-                            view.UpdateBrowserWindowsList(currentWindows, currentWindowHandle);
-                        },
-                            out outException,
-                            null,
-                            TimeSpan.FromMinutes(1)
-                        );
+			if (!isOk)
+			{
+				MyLog.Error("Failed to refresh All Windows List");
+				if (outException != null) throw outException;
+			}
+		}
 
-            if (!isOk)
-            {
-                MyLog.Error("Failed to refresh All Windows List");
-                if (outException != null) throw outException;
-            }
-        }
+		public void RefreshFramesList()
+		{
+			Exception outException;
+			bool isOk = false;
+			isOk = UIActions.PerformSlowOperation(
+						"Operation: Refresh All Frames List",
+						() =>
+						{
+							BrowserPageFrame rootFrame = SwdBrowser.GetPageFramesTree();
+							BrowserPageFrame[] currentPageFrames = rootFrame.ToList().ToArray();
+							SwdBrowser.SwitchToDefaultContent();
+							view.UpdatePageFramesList(currentPageFrames);
+						},
+							out outException,
+							null,
+							TimeSpan.FromMinutes(1)
+						);
 
-        public void RefreshFramesList()
-        {
-            Exception outException;
-            bool isOk = false;
-            isOk = UIActions.PerformSlowOperation(
-                        "Operation: Refresh All Frames List",
-                        () =>
-                        {
-                            BrowserPageFrame rootFrame = SwdBrowser.GetPageFramesTree();
-                            BrowserPageFrame[] currentPageFrames = rootFrame.ToList().ToArray();
-                            SwdBrowser.SwitchToDefaultContent();
-                            view.UpdatePageFramesList(currentPageFrames);
-                        },
-                            out outException,
-                            null,
-                            TimeSpan.FromMinutes(1)
-                        );
+			if (!isOk)
+			{
+				MyLog.Error("Failed to refresh All Frames List");
+				MyLog.Exception(outException);
+				if (outException != null) throw outException;
+			}
+		}
 
-            if (!isOk)
-            {
-                MyLog.Error("Failed to refresh All Frames List");
-                MyLog.Exception(outException);
-                if (outException != null) throw outException;
-            }
-        }
+		public void RefreshSwitchToList()
+		{
+			if (SwdBrowser.IsWorking)
+			{
+				view.DisableSwitchToControls();
+				RefreshWindowsList();
+				RefreshFramesList();
+				view.EnableSwitchToControls();
+			}
+			else
+			{
+				view.DisableSwitchToControls();
+			}
+		}
 
+		internal void SetBrowserUrl(string browserUrl)
+		{
+			Driver.Navigate().GoToUrl(browserUrl);
+		}
 
-        
-        public void RefreshSwitchToList()
-        {
-            if (SwdBrowser.IsWorking)
-            {
-                view.DisableSwitchToControls();
-                RefreshWindowsList();
-                RefreshFramesList();
-                view.EnableSwitchToControls();
-            }
-            else
-            {
-                view.DisableSwitchToControls();
-            }
-        }
+		public void ProcessCommands()
+		{
+			var command = SwdBrowser.GetNextCommand();
+			if (command is GetXPathFromElement)
+			{
+				var getXPathCommand = command as GetXPathFromElement;
+				view.UpdateVisualSearchResult(getXPathCommand.XPathValue);
+			}
+			else if (command is AddElement)
+			{
+				var addElementCommand = command as AddElement;
 
+				var element = new WebElementDefinition()
+				{
+					Name = addElementCommand.ElementCodeName,
+					HowToSearch = LocatorSearchMethod.XPath,
+					Locator = addElementCommand.ElementXPath,
+				};
+				bool addNew = true;
+				Presenters.SelectorsEditPresenter.UpdateWebElementWithAdditionalProperties(element);
+				Presenters.PageObjectDefinitionPresenter.UpdatePageDefinition(element, addNew);
+			}
+		}
 
-        internal void SetBrowserUrl(string browserUrl)
-        {
-            Driver.Navigate().GoToUrl(browserUrl);
-        }
+		private bool webElementExplorerStarted = false;
+		private bool webElementExplorerThreadPaused = false;
 
+		public void ResumeWebElementExplorerProcessing()
+		{
+			MyLog.Write("ResumeWebElementExplorerProcessing");
+			webElementExplorerThreadPaused = false;
+		}
 
+		public void PauseWebElementExplorerProcessing()
+		{
+			MyLog.Write("PauseWebElementExplorerProcessing");
+			webElementExplorerThreadPaused = true;
+		}
 
-        public void ProcessCommands()
-        {
-            var command = SwdBrowser.GetNextCommand();
-            if (command is GetXPathFromElement)
-            {
-                var getXPathCommand = command as GetXPathFromElement;
-                view.UpdateVisualSearchResult(getXPathCommand.XPathValue);
-            }
-            else if (command is AddElement)
-            {
-                var addElementCommand = command as AddElement;
+		public void VisualSearch_UpdateSearchResult()
+		{
+			try
+			{
+				MyLog.Write("VisualSearch_UpdateSearchResult: Started");
+				while (webElementExplorerStarted == true)
+				{
+					if (!webElementExplorerThreadPaused)
+					{
+						try
+						{
+							if (!SwdBrowser.IsVisualSearchScriptInjected())
+							{
+								MyLog.Write("VisualSearch_UpdateSearchResult: Found the Visual search is not injected. Injecting");
+								SwdBrowser.InjectVisualSearch();
+							}
 
-                var element = new WebElementDefinition()
-                {
-                    Name = addElementCommand.ElementCodeName,
-                    HowToSearch = LocatorSearchMethod.XPath,
-                    Locator = addElementCommand.ElementXPath,
-                };
-                bool addNew = true;
-                Presenters.SelectorsEditPresenter.UpdateWebElementWithAdditionalProperties(element);
-                Presenters.PageObjectDefinitionPresenter.UpdatePageDefinition(element, addNew);
-            }
-        }
+							if (!webElementExplorerThreadPaused)
+							{
+								ProcessCommands();
+							}
+						}
+						catch (Exception e)
+						{
+							StopVisualSearch();
+							MyLog.Error("Visual search stopped:");
+							MyLog.Exception(e);
+						}
+					}
+					Thread.Sleep(VisualSearchQueryDelayMs);
+				}
+			}
+			finally
+			{
+				StopVisualSearch();
+				MyLog.Write("VisualSearch_UpdateSearchResult: Finished");
+			}
+		}
 
-        bool webElementExplorerStarted = false;
-        bool webElementExplorerThreadPaused = false;
+		internal void StopVisualSearch()
+		{
+			view.VisualSearchStopped();
+			webElementExplorerStarted = false;
+		}
 
-        public void ResumeWebElementExplorerProcessing()
-        {
-            MyLog.Write("ResumeWebElementExplorerProcessing");
-            webElementExplorerThreadPaused = false;
-        }
+		internal void StartVisualSearch()
+		{
+			SwdBrowser.InjectVisualSearch();
+			if (visualSearchWorker != null)
+			{
+				visualSearchWorker.Abort();
+				visualSearchWorker = null;
+			}
 
-        public void PauseWebElementExplorerProcessing()
-        {
-            MyLog.Write("PauseWebElementExplorerProcessing");
-            webElementExplorerThreadPaused = true;
-        }
+			webElementExplorerStarted = true;
 
-        public void VisualSearch_UpdateSearchResult()
-        {
-            try
-            {
-                MyLog.Write("VisualSearch_UpdateSearchResult: Started");
-                while (webElementExplorerStarted == true)
-                {
-                    if (!webElementExplorerThreadPaused)
-                    {
-                        try
-                        {
-                            if (!SwdBrowser.IsVisualSearchScriptInjected())
-                            {
-                                MyLog.Write("VisualSearch_UpdateSearchResult: Found the Visual search is not injected. Injecting");
-                                SwdBrowser.InjectVisualSearch();
-                            }
+			visualSearchWorker = new Thread(VisualSearch_UpdateSearchResult);
+			visualSearchWorker.IsBackground = true;
+			visualSearchWorker.Start();
 
-                            if (!webElementExplorerThreadPaused)
-                            {
-                                ProcessCommands();
-                            }
-                        }
-                        catch (Exception e)
-                        {
-                            StopVisualSearch();
-                            MyLog.Error("Visual search stopped:");
-                            MyLog.Exception(e);
-                        }
-                    }
-                    Thread.Sleep(VisualSearchQueryDelayMs);
-                }
-            }
-            finally
-            {
-                StopVisualSearch();
-                MyLog.Write("VisualSearch_UpdateSearchResult: Finished");
-            }
+			while (!visualSearchWorker.IsAlive)
+			{
+				Application.DoEvents();
+				System.Threading.Thread.Sleep(1);
+			}
 
-        }
+			view.VisuaSearchStarted();
+		}
 
-        internal void StopVisualSearch()
-        {
-            view.VisualSearchStopped();
-            webElementExplorerStarted = false;
-        }
+		internal void ChangeVisualSearchRunningState()
+		{
+			view.DisableWebElementExplorerRunButton();
 
-        internal void StartVisualSearch()
-        {
-            SwdBrowser.InjectVisualSearch();
-            if (visualSearchWorker != null)
-            {
-                visualSearchWorker.Abort();
-                visualSearchWorker = null;
-            }
+			try
+			{
+				if (webElementExplorerStarted)
+				{
+					StopVisualSearch();
+					view.DisableWebElementExplorerResultsField();
+				}
+				else
+				{
+					StartVisualSearch();
+					view.EnableWebElementExplorerResultsField();
+				}
+			}
+			finally
+			{
+				view.EnableWebElementExplorerRunButton();
+			}
+		}
 
-            webElementExplorerStarted = true;
+		internal void InitControls()
+		{
+			var shouldControlBeEnabled = SwdBrowser.IsWorking;
+			view.SetDriverDependingControlsEnabled(shouldControlBeEnabled);
+		}
 
-            visualSearchWorker = new Thread(VisualSearch_UpdateSearchResult);
-            visualSearchWorker.IsBackground = true;
-            visualSearchWorker.Start();
+		public void DisplayLoadingIndicator(bool showLoading)
+		{
+			if (showLoading)
+			{
+				view.ShowGlobalLoading();
+			}
+			else
+			{
+				view.HideGlobalLoading();
+			}
+		}
 
-            while (!visualSearchWorker.IsAlive)
-            {
-                Application.DoEvents();
-                System.Threading.Thread.Sleep(1);
-            }
+		internal void SwitchToFrame(BrowserPageFrame frame)
+		{
+			PauseWebElementExplorerProcessing();
+			try
+			{
+				SwdBrowser.DestroyVisualSearch();
+				SwdBrowser.GoToFrame(frame);
+				MyLog.Write("FRAME: Switched to frame with Index= " + frame.Index + "; and Full Name:" + frame.ToString());
+			}
+			finally
+			{
+				ResumeWebElementExplorerProcessing();
+			}
+		}
 
-            view.VisuaSearchStarted();
-
-        }
-
-
-        internal void ChangeVisualSearchRunningState()
-        {
-            view.DisableWebElementExplorerRunButton();
-
-            try
-            {
-                if (webElementExplorerStarted)
-                {
-                    StopVisualSearch();
-                    view.DisableWebElementExplorerResultsField();
-                }
-                else
-                {
-                    StartVisualSearch();
-                    view.EnableWebElementExplorerResultsField();
-                }
-            }
-            finally
-            {
-                view.EnableWebElementExplorerRunButton();
-            }
-        }
-
-        internal void InitControls()
-        {
-            var shouldControlBeEnabled = SwdBrowser.IsWorking;
-            view.SetDriverDependingControlsEnabled(shouldControlBeEnabled);
-
-        }
-
-        public void DisplayLoadingIndicator(bool showLoading)
-        {
-            if (showLoading)
-            {
-                view.ShowGlobalLoading();
-            }
-            else
-            {
-                view.HideGlobalLoading();
-            }
-        }
-
-        internal void SwitchToFrame(BrowserPageFrame frame)
-        {
-            PauseWebElementExplorerProcessing();
-            try
-            {
-                SwdBrowser.DestroyVisualSearch();
-                SwdBrowser.GoToFrame(frame);
-                MyLog.Write("FRAME: Switched to frame with Index= " + frame.Index + "; and Full Name:" + frame.ToString());
-            }
-            finally
-            {
-                ResumeWebElementExplorerProcessing();
-            }
-        }
-
-
-
-        internal void SwitchToWindow(BrowserWindow window)
-        {
-            PauseWebElementExplorerProcessing();
-            view.DisableSwitchToControls();
-            try 
-            {
-                SwdBrowser.GotoWindow(window);
-                MyLog.Write("WINDOW: Switched to window/popup with WinID= "
-                            + window.WindowHandle + "; and Title:" + window.Title);
-                RefreshFramesList();
-            }
-            finally 
-            {
-                ResumeWebElementExplorerProcessing();
-                view.EnableSwitchToControls();
-            }
-        }
-    }
+		internal void SwitchToWindow(BrowserWindow window)
+		{
+			PauseWebElementExplorerProcessing();
+			view.DisableSwitchToControls();
+			try
+			{
+				SwdBrowser.GotoWindow(window);
+				MyLog.Write("WINDOW: Switched to window/popup with WinID= "
+							+ window.WindowHandle + "; and Title:" + window.Title);
+				RefreshFramesList();
+			}
+			finally
+			{
+				ResumeWebElementExplorerProcessing();
+				view.EnableSwitchToControls();
+			}
+		}
+	}
 }
